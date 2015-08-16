@@ -1,56 +1,78 @@
-setwd("C:/Users/nikhil kapoor/Desktop/Study/assignment")
-getwd()
-actdata <- read.csv("activity.csv")
-actdata$date <- as.Date(actdata$date,"%Y-%m-%d")
-head(actdata)
+library(plyr)
+library(ggplot2)
 
-totalsteps <- tapply(actdata$steps, actdata$date,sum)
-totalsteps
 
-hist(totalsteps,col="red",xlab="Total Steps per Day", 
-     ylab="Frequency", main="Histogram of Total Steps taken per day")
+#Answer 1
+activity <- read.csv("activity.csv") 
+activity$date <- as.POSIXct(activity$date)
 
-mean(totalsteps,na.rm=TRUE)
+dailysteps <- aggregate(activity$steps, by = list(activity$date), sum, na.rm=TRUE) 
+names(dailysteps) <- c("Date", "steps")
 
-median(totalsteps,na.rm=TRUE)
+#Answer 2
+#hist plot
+qplot(steps, data = dailysteps, geom="histogram", xlab = "Daily Number of Steps", binwidth = 300)
 
-meansteps <- tapply(actdata$steps,actdata$interval,
-                    mean,na.rm=TRUE)
+#Answer 3
+mean.steps <- mean(dailysteps$steps) 
+median.steps <- median(dailysteps$steps)
 
-plot(row.names(meansteps),meansteps,type="l",
-     xlab="Time Intervals (5-minute)", 
-     ylab="Mean number of steps taken (all Days)", 
-     main="Average Steps Taken at 5 minute Intervals",
-     col="blue")
+#Answer 4
+#calculate average number of steps by intervals without missing values
+avg_no_stps_intvl <- as.data.frame(tapply(activity$steps, 
+                                          INDEX = activity$interval, 
+                                          FUN = "mean", na.rm = TRUE))
+#Name the calculated average column to avg_steps
+colnames(avg_no_stps_intvl) <- "avg_steps"
+#Name rownames to interval as INDEX has created unterval as rownames
+avg_no_stps_intvl$interval <- rownames(avg_no_stps_intvl)
+row.names(avg_no_stps_intvl)<-NULL
+plot(avg_no_stps_intvl$interval, avg_no_stps_intvl$avg_steps, type = "l", 
+     xlab = "Time Interval (5-mins)", ylab = "Average number of steps", 
+     main = "Average Number of Steps by Time  Interval", col="blue")
 
-interval_num <- which.max(meansteps)
-interval_max_steps <- names(interval_num)
-interval_max_steps
+#Answer 5
+most.steps <- avg_no_stps_intvl$interval[avg_no_stps_intvl$avg_steps == max(avg_no_stps_intvl$avg_steps)]
+most.steps
 
-num_na_values <- sum(is.na(actdata))
-num_na_values 
+#Answer 6
+na.steps <- subset(activity, is.na(steps))
+num.NAs <-length(na.steps$steps)
+num.NAs 
 
-na_indices <-  which(is.na(actdata))
-imputed_values <- meansteps[as.character(actdata[na_indices,3])]
-names(imputed_values) <- na_indices
-for (i in na_indices) {
-  actdata$steps[i] = imputed_values[as.character(i)]
-}
-sum(is.na(actdata)) 
-totsteps <- tapply(actdata$steps, actdata$date,sum)
-hist(totsteps,col="red",xlab="Total Steps per Day", 
-     ylab="Frequency", main="Histogram of Total Steps taken per day")
+#Anser 7
+median_stps_intvl <- as.data.frame(tapply(activity$steps, 
+                                          INDEX = activity$interval, 
+                                          FUN = "median", na.rm = TRUE))
+#Name calculated median column to median_steps
+colnames(median_stps_intvl) <- "median_steps"
+#Name rownames to interval as INDEX has created unterval as rownames
+median_stps_intvl$interval <- rownames(median_stps_intvl)
+row.names(median_stps_intvl)<-NULL
+mean_median<-merge(median_stps_intvl,avg_no_stps_intvl, by="interval")
+#merge mean and median with original data with missing
+acmDT_with_summ<-merge(activity,mean_median, by="interval")
 
-days <- weekdays(actdata$date)
-actdata$day_type <- ifelse(days == "Saturday" | days == "Sunday", 
-                           "Weekend", "Weekday")
-meansteps <- aggregate(actdata$steps,
-                       by=list(actdata$interval,
-                               actdata$day_type),mean)
-names(meansteps) <- c("interval","day_type","steps")
-xyplot(steps~interval | day_type, meansteps,type="l",
-       layout=c(1,2),xlab="Interval",ylab = "Number of steps")
 
-tapply(meansteps$steps,meansteps$day_type,
-       function (x) { c(MINIMUM=min(x),MEAN=mean(x),
-                        MEDIAN=median(x),MAXIMUM=max(x))})
+#sum the number of steps each day into the dailysteps2 DF and get the mean and median 
+dailysteps2 <- aggregate(activity$steps, by = list(activity$date), sum, na.rm=TRUE)
+names(dailysteps2) <- c("Date", "steps")
+
+qplot(steps, data = dailysteps2, geom="histogram", xlab = "Daily Number of Steps", binwidth = 300)
+
+# Add the Weekday/weekend identifier
+
+activity$week <- ifelse(weekdays(activity$date) == "Saturday" | weekdays(activity$date) == "Sunday" ,"weekend","weekday")
+
+#df of the mean and median number of steps taken, averaged across all days (y-axis)
+intsteps2 <- aggregate(activity$steps, by = list(activity$week, activity$interval), mean, na.rm=TRUE)
+intstepsmed2 <- aggregate(activity$steps, by = list(activity$week, activity$interval), median, na.rm=TRUE)
+
+intsteps2 <- cbind(intsteps2[], intstepsmed2$x)
+
+#Tidy the df names and round the numbers
+names(intsteps2) = c("weekday", "interval","mean.steps", "median.steps")
+intsteps2$mean.steps <- round(intsteps2$mean.steps)
+intsteps2$median.steps <- round(intsteps2$median.steps)
+
+ggplot(intsteps2, aes(x = interval, y = mean.steps)) + ylab("Number of Steps") + geom_line() + facet_grid(weekday~.)
